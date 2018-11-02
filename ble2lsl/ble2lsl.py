@@ -397,7 +397,6 @@ class Dummy(BaseStreamer):
         self._threads = {name: threading.Thread(target=self._stream,
                                                 kwargs=dict(name=name))
                          for name in self._subscriptions}
-
         if autostart:
             self.start()
 
@@ -418,11 +417,20 @@ class Dummy(BaseStreamer):
         """Run in thread to mimic periodic hardware input."""
         for chunk in self._chunk_iter[name]:
             if not self._proceed:
+                # dummy has received stop signal
                 break
+
             self._chunks[name] = chunk
             timestamp = time.time()
             self._push_func[name](name, timestamp)
-            time.sleep(self._delays[name])
+
+            delay = self._delays[name]
+            # some threads may have long delays;
+            # subdivide these so threads can stop within ~1 s
+            while delay > 1 and self._proceed:
+                time.sleep(1)
+                delay -= 1
+            time.sleep(delay % 1)
 
     def make_chunk(self, chunk_ind):
         """Prepare a chunk from the totality of local data.

@@ -7,17 +7,17 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'ble2lsl'
-DESCRIPTION = ''
+DESCRIPTION = ('Streaming data from Bluetooth Low Energy (BLE) devices '
+               + 'through the Lab Streaming Layer (LSL).')
 URL = 'https://github.com/merlin-neurotech/ble2lsl'
-EMAIL = ''
+EMAIL = 'mnc@clubs.queensu.ca'
 AUTHOR = 'Merlin Neurotech'
-REQUIRES_PYTHON = '>=3.5.0'
-VERSION = '0.1.2'
+REQUIRES_PYTHON = '>=3.6.0'
+VERSION = '0.1.3'
 
 # Dependencies.
 REQUIRED = [
-    'numpy==1.14.0', 'pygatt==3.2.0', 'pylsl==1.10.5', 'bitstring==3.1.5'
-    # 'numpy==1.13.3'
+    'numpy>=1.13.0', 'pygatt==3.2.0', 'pylsl>=1.10.5', 'bitstring>=3.1.5'
 ]
 
 EXTRAS = {
