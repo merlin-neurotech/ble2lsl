@@ -6,13 +6,18 @@ import pytest
 
 @pytest.fixture(scope='module', params=b2l.devices.DEVICE_NAMES)
 def device(request):
+    """Test all compatible devices."""
     device = globals()[request.param]
     return device
 
 @pytest.fixture(scope='module', params=([b2l.BaseStreamer]
                                          + b2l.BaseStreamer.__subclasses__()))
 def streamer(request, device):
+    """Test `BaseStreamer` and all its subclasses."""
     streamer = request.param(device, autostart=False)
+
+    # not sure why this doesn't work
+    # (thinks streamer doesn't exist, UnboundLocalError)
     # def teardown():
     #     try:
     #         streamer.stop()
@@ -21,6 +26,12 @@ def streamer(request, device):
     #     del(streamer)
     # request.addfinalizer(teardown)
     return streamer
+
+def test_empty_chunks(device):
+    pass
+
+def test_get_default_subscriptions(device):
+    pass
 
 class TestBaseStreamer:
     def test_init(self, streamer, device):
@@ -81,3 +92,6 @@ class TestDummy:
 
     def test_make_chunk(self):
         pass
+
+class TestNoisySinusoids:
+    pass
