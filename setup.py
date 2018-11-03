@@ -4,6 +4,7 @@ import sys
 from shutil import rmtree
 
 from setuptools import find_packages, setup, Command
+from setuptools.command.test import test as TestCommand
 
 # Package meta-data.
 NAME = 'ble2lsl'
@@ -80,6 +81,20 @@ class UploadCommand(Command):
         sys.exit()
 
 
+class Tox(TestCommand):
+
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+        self.test_suite = True
+
+    def run_tests(self):
+        # apparently necessary to import here
+        import tox
+        errcode = tox.cmdline(self.test_args)
+        sys.exit(errcode)
+
+
 # Where the magic happens:
 setup(
     name=NAME,
@@ -100,6 +115,7 @@ setup(
     # },
     install_requires=REQUIRED,
     extras_require=EXTRAS,
+    tests_require=['tox'],
     include_package_data=True,
     license='BSD 3-Clause License',
     classifiers=[
@@ -115,6 +131,7 @@ setup(
     ],
     # $ setup.py publish support.
     cmdclass={
+        'test': Tox,
         'upload': UploadCommand,
     },
 )
