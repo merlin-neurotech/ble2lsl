@@ -17,9 +17,7 @@ REQUIRES_PYTHON = '>=3.6.0'
 VERSION = '0.1.3'
 
 # Dependencies.
-REQUIRED = [
-    'numpy>=1.13.0', 'pygatt==3.2.0', 'pylsl>=1.10.5', 'bitstring>=3.1.5'
-]
+REQUIRED = []
 
 EXTRAS = {
     # 'fancy feature': ['django'],
@@ -42,6 +40,13 @@ if not VERSION:
         exec(f.read(), about)
 else:
     about['__version__'] = VERSION
+
+# load requirements from requirements.txt
+if REQUIRED == []:
+    with open(os.path.join(here, 'requirements.txt')) as f:
+        required = f.read().rstrip().split('\n')
+else:
+    required = REQUIRED
 
 
 class UploadCommand(Command):
@@ -113,7 +118,7 @@ setup(
     # entry_points={
     #     'console_scripts': ['mycli=mymodule:cli'],
     # },
-    install_requires=REQUIRED,
+    install_requires=required,
     extras_require=EXTRAS,
     tests_require=['tox'],
     include_package_data=True,
