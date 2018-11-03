@@ -48,7 +48,7 @@ class BaseStreamer:
     """
 
     def __init__(self, device, subscriptions=None, time_func=time.time,
-                 ch_names=None):
+                 ch_names=None, **kwargs):
         """Construct a `BaseStreamer` object.
 
         Args:
