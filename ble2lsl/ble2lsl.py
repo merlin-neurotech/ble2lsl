@@ -459,12 +459,15 @@ def empty_chunks(stream_params, subscriptions):
     return chunks
 
 
-def get_default_subscriptions(device):
+def get_default_subscriptions(device, pos_rate=False):
     # look for default list; if unavailable, subscribe to all
     try:
         subscriptions = device.DEFAULT_SUBSCRIPTIONS
     except AttributeError:
         subscriptions = device.STREAMS
+    if pos_rate:
+        subscriptions = [name for name in subscriptions
+                         if device.PARAMS['streams']['nominal_srate'][name] > 0]
     return subscriptions
 
 

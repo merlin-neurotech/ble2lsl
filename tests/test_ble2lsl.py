@@ -16,6 +16,8 @@ def streamer(request, device):
     """Test `BaseStreamer` and all its subclasses."""
     streamer = request.param(device, autostart=False)
 
+    # TODO: user ch_names
+
     # not sure why this doesn't work
     # (thinks streamer doesn't exist, UnboundLocalError)
     # def teardown():
@@ -27,21 +29,46 @@ def streamer(request, device):
     # request.addfinalizer(teardown)
     return streamer
 
-def test_empty_chunks(device):
-    pass
+@pytest.fixture(scope='module')
+def subscriptions(device):
+    subscriptions = [name for name in device.DEFAULT_SUBSCRIPTIONS
+                     if device.PARAMS['streams']['nominal_srate'][name] > 0]
+    return set(subscriptions)
 
-def test_get_default_subscriptions(device):
-    pass
+def test_empty_chunks(device, subscriptions):
+    chunks = b2l.empty_chunks(device.PARAMS['streams'], subscriptions)
+    assert set(chunks.keys()) == subscriptions
+    for name in subscriptions:
+        # empty?
+        assert not np.any(chunks[name])
+        # right shape?
+        assert (chunks[name].shape[0]
+                == device.PARAMS['streams']['chunk_size'][name])
+        assert (chunks[name].shape[1]
+                == device.PARAMS['streams']['channel_count'][name])
+        # right dtype?
+        assert (chunks[name].dtype
+                is device.PARAMS['streams']['numpy_dtype'][name])
+
+
+def test_get_default_subscriptions(device, subscriptions):
+    assert (set(b2l.get_default_subscriptions(device, pos_rate=True))
+            == subscriptions)
+    try:
+        assert (set(b2l.get_default_subscriptions(device, pos_rate=False))
+                == device.DEFAULT_SUBSCRIPTIONS)
+    except AttributeError:
+        assert (set(b2l.get_default_subscriptions(device, pos_rate=False))
+                == device.STREAMS)
+
 
 class TestBaseStreamer:
-    def test_init(self, streamer, device):
+    def test_init(self, streamer, device, subscriptions):
         # not sure if necessary to test private variables, or just
         # the public behaviour
         assert streamer._device is device
         if streamer.__class__ is b2l.Dummy:
-            defaults = [name for name in device.DEFAULT_SUBSCRIPTIONS
-                        if device.PARAMS['streams']['nominal_srate'][name] > 0]
-            assert set(streamer.subscriptions) == set(defaults)
+            assert set(streamer.subscriptions) == subscriptions
         else:
             assert (set(streamer.subscriptions)
                     == set(device.DEFAULT_SUBSCRIPTIONS))
