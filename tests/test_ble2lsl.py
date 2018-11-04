@@ -2,6 +2,8 @@
 import ble2lsl as b2l
 from ble2lsl.devices import *
 
+import time
+
 import pytest
 
 @pytest.fixture(scope='module', params=b2l.devices.DEVICE_NAMES)
@@ -109,13 +111,22 @@ class TestDummy:
     TEST_CLASS = b2l.Dummy
 
     def test_init(self, streamer, device):
-        pass
+        assert streamer._address == "DUMMY"
 
-    def test_start(self):
-        pass
+    def test_start(self, streamer):
+        for name, thread in streamer._threads.items():
+            assert not thread.is_alive()
+        streamer.start()
+        for name, thread in streamer._threads.items():
+            assert thread.is_alive()
 
     def test_stop(self):
-        pass
+        for name, thread in streamer._threads.items():
+            assert thread.is_alive()
+        streamer.stop()
+        time.sleep(1.5)
+        #for name, thread in streamer._threads.items():
+        #    assert not thread.is_alive()
 
     def test_make_chunk(self):
         pass
