@@ -30,6 +30,7 @@ import numpy as np
 import pygatt
 from pygatt.backends.bgapi.exceptions import ExpectedResponseTimeout
 import pylsl as lsl
+import serial
 
 INFO_ARGS = ['type', 'channel_count', 'nominal_srate', 'channel_format']
 
@@ -267,7 +268,30 @@ class Streamer(BaseStreamer):
             try:
                 self._adapter.start()
                 adapter_started = True
+            except pygatt.exceptions.NotConnectedError as e:
+                # dongle not connected
+                continue
             except (ExpectedResponseTimeout, StructError):
+                continue
+            except OSError as os_error:
+                if os_error.errno == 6:
+                    # "device not configured"
+                    print(os_error)
+                    continue
+                else:
+                    raise os_error
+            except serial.serialutil.SerialException as serial_exception:
+                # NOTE: some of these may be raised (apparently harmlessly) by
+                # the self._adapter._receiver thread, which can't be captured
+                # here; maybe there is a way to prevent writing to stdout though
+                if serial_exception.errno == 6:
+                    # "couldn't open port"
+                    print(serial_exception)
+                    continue
+                else:
+                    raise serial_exception
+            except pygatt.backends.bgapi.exceptions.BGAPIError as e:
+                # adapter not connected?
                 continue
 
         if self._address is None:

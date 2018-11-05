@@ -1,9 +1,12 @@
+import inspect
 import io
 import os
-import sys
+import re
 from shutil import rmtree
+import sys
 
 from setuptools import find_packages, setup, Command
+from setuptools.command.install import install
 from setuptools.command.test import test as TestCommand
 
 # Package meta-data.
@@ -138,5 +141,6 @@ setup(
     cmdclass={
         'test': Tox,
         'upload': UploadCommand,
+        'install': install,
     },
 )
