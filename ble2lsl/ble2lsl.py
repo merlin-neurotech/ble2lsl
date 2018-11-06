@@ -91,14 +91,13 @@ class BaseStreamer:
 
     def _init_lsl_outlets(self):
         """Call in subclass after acquiring address."""
-        source_id = "{}-{}".format(self._device.NAME, self._address)
         self._info = {}
         self._outlets = {}
         for name in self._subscriptions:
             info = {arg: self._stream_params[arg][name] for arg in INFO_ARGS}
-            outlet_name = '{}-{}'.format(self._device.NAME, name)
+            outlet_name = '{}-{}'.format(self._device_id, name)
             self._info[name] = lsl.StreamInfo(outlet_name, **info,
-                                              source_id=source_id)
+                                              source_id=self._device_id)
             self._add_device_info(name)
             chunk_size = self._stream_params["chunk_size"][name]
             self._outlets[name] = lsl.StreamOutlet(self._info[name],
@@ -120,6 +119,8 @@ class BaseStreamer:
             desc.append_child_value("manufacturer", self._device.MANUFACTURER)
         except KeyError:
             warn("Manufacturer not specified in device file")
+
+        desc.append_child_value("address", self._address)
 
         channels = desc.append_child("channels")
         try:
@@ -256,19 +257,18 @@ class Streamer(BaseStreamer):
         self._ble_device.disconnect()  # BLE disconnect
         self._adapter.stop()
 
-    def connect(self):
+    def connect(self, max_attempts=20):
         """Establish connection to BLE device (prior to `start`).
 
         Starts the `pygatt` adapter, resolves the device address if necessary,
         connects to the device, and subscribes to the channels specified in the
         device parameters.
         """
-        adapter_started = False
-        while not adapter_started:
+        for _ in range(max_attempts):
             try:
                 self._adapter.start()
-                adapter_started = True
-            except pygatt.exceptions.NotConnectedError as e:
+                break
+            except pygatt.exceptions.NotConnectedError as notconnected_error:
                 # dongle not connected
                 continue
             except (ExpectedResponseTimeout, StructError):
@@ -290,13 +290,15 @@ class Streamer(BaseStreamer):
                     continue
                 else:
                     raise serial_exception
-            except pygatt.backends.bgapi.exceptions.BGAPIError as e:
+            except pygatt.backends.bgapi.exceptions.BGAPIError as bgapi_error:
                 # adapter not connected?
                 continue
+            time.sleep(0.1)
 
         if self._address is None:
             # get the device address if none was provided
-            self._address = self._resolve_address(self._device.NAME)
+            self._device_id, self._address = \
+                self._resolve_address(self._device.NAME)
         try:
             self._ble_device = self._adapter.connect(self._address,
                 address_type=self._ble_params['address_type'],
@@ -328,7 +330,7 @@ class Streamer(BaseStreamer):
         list_devices = self._adapter.scan(timeout=self._scan_timeout)
         for device in list_devices:
             if name in device['name']:
-                return device['address']
+                return device['name'], device['address']
         raise(ValueError("No devices found with name `{}`".format(name)))
 
     def _transmit_chunks(self):
@@ -402,6 +404,7 @@ class Dummy(BaseStreamer):
         BaseStreamer.__init__(self, device=device, subscriptions=subscriptions,
                               **kwargs)
 
+        self._device_id = "{}-DUMMY".format(device.NAME)
         self._address = "DUMMY"
         self._init_lsl_outlets()
 
