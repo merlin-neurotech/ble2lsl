@@ -1,9 +1,13 @@
+import inspect
 import io
 import os
-import sys
+import re
 from shutil import rmtree
+import sys
 
 from setuptools import find_packages, setup, Command
+from setuptools.command.install import install
+from setuptools.command.test import test as TestCommand
 
 # Package meta-data.
 NAME = 'ble2lsl'
@@ -16,9 +20,7 @@ REQUIRES_PYTHON = '>=3.6.0'
 VERSION = '0.1.3'
 
 # Dependencies.
-REQUIRED = [
-    'numpy>=1.13.0', 'pygatt==3.2.0', 'pylsl>=1.10.5', 'bitstring>=3.1.5'
-]
+REQUIRED = []
 
 EXTRAS = {
     # 'fancy feature': ['django'],
@@ -37,10 +39,17 @@ except FileNotFoundError:
 # Load the package's __version__.py module as a dictionary.
 about = {}
 if not VERSION:
-    with open(os.path.join(here, NAME, '__version__.py')) as f:
+    with open(os.path.join(here, NAME.lower(), '__version__.py')) as f:
         exec(f.read(), about)
 else:
     about['__version__'] = VERSION
+
+# load requirements from requirements.txt
+if REQUIRED == []:
+    with open(os.path.join(here, 'requirements.txt')) as f:
+        required = f.read().rstrip().split('\n')
+else:
+    required = REQUIRED
 
 
 class UploadCommand(Command):
@@ -80,6 +89,20 @@ class UploadCommand(Command):
         sys.exit()
 
 
+class Tox(TestCommand):
+
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+        self.test_suite = True
+
+    def run_tests(self):
+        # apparently necessary to import here
+        import tox
+        errcode = tox.cmdline(self.test_args)
+        sys.exit(errcode)
+
+
 # Where the magic happens:
 setup(
     name=NAME,
@@ -98,8 +121,9 @@ setup(
     # entry_points={
     #     'console_scripts': ['mycli=mymodule:cli'],
     # },
-    install_requires=REQUIRED,
+    install_requires=required,
     extras_require=EXTRAS,
+    tests_require=['tox'],
     include_package_data=True,
     license='BSD 3-Clause License',
     classifiers=[
@@ -115,6 +139,8 @@ setup(
     ],
     # $ setup.py publish support.
     cmdclass={
+        'test': Tox,
         'upload': UploadCommand,
+        'install': install,
     },
 )

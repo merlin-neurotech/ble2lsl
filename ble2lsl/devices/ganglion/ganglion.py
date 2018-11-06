@@ -61,11 +61,11 @@ PARAMS = dict(
 """OpenBCI Ganglion LSL- and BLE-related parameters."""
 
 INT_SIGN_BYTE = (b'\x00', b'\xff')
-SCALE_FACTOR = streams_dict([1.2 / (8388608.0 * 1.5 * 51.0),
+SCALE_FACTOR = streams_dict([1200 / (8388608.0 * 1.5 * 51.0),
                              0.016,
                              1  # not used (messages)
                              ])
-"""Scale factors for conversion of EEG and accelerometer data to mV."""
+"""Scale factors for conversion of EEG and accelerometer data."""
 
 ID_TURNOVER = streams_dict([201, 10])
 """The number of samples processed before the packet ID cycles back to zero."""
@@ -153,7 +153,7 @@ class PacketHandler(BasePacketHandler):
             # convert from packet to sample ID
             sample_id = (packet_id - 1) * 2 + delta_id + 1
             # 19bit packets hold deltas between two samples
-            self._last_eeg_data += np.array(deltas[delta_id])
+            self._last_eeg_data -= np.array(deltas[delta_id])
             self._update_counts_and_enqueue("EEG", sample_id)
 
     def _parse_compressed_19bit(self, packet_id, packet):
