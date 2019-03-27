@@ -1,7 +1,8 @@
 """Interfacing parameters for the OpenBCI Ganglion Board."""
 
-from ble2lsl.devices.device import BasePacketHandler
-from ble2lsl.utils import bad_data_size, dict_partial_from_keys
+from ble2lsl.devices import device
+from ble2lsl import utils
+from ble2lsl.utils import AttrDict
 
 import struct
 from warnings import warn
@@ -20,9 +21,9 @@ DEFAULT_SUBSCRIPTIONS = ["EEG", "messages"]
 """Streams to which to subscribe by default."""
 
 # for constructing dicts with STREAMS as keys
-streams_dict = dict_partial_from_keys(STREAMS)
+streams_dict = utils.dict_partial_from_keys(STREAMS)
 
-PARAMS = dict(
+PARAMS = AttrDict(
     streams=dict(
         type=streams_dict(STREAMS),  # same as stream names
         channel_count=streams_dict([4, 3, 1]),
@@ -41,18 +42,20 @@ PARAMS = dict(
         interval_max=11,  # suggest 10
 
         # receive characteristic UUIDs
-        EEG=["2d30c082f39f4ce6923f3484ea480596"],
-        accelerometer='',  # placeholder; already subscribed through eeg
-        messages='',  # placeholder; subscription not required
+        receive=dict(
+            EEG=["2d30c082f39f4ce6923f3484ea480596"],
+            accelerometer='',  # placeholder; already subscribed through eeg
+            messages='',  # placeholder; subscription not required
+        ),
 
-        # send characteristic UUID and commands
+        # send characteristic UUID
         send="2d30c083f39f4ce6923f3484ea480596",
-        stream_on=b'b',
-        stream_off=b's',
-        accelerometer_on=b'n',
-        accelerometer_off=b'N',
-        # impedance_on=b'z',
-        # impedance_off=b'Z',
+
+        command=dict(
+            accelerometer=dict(on=b'n', off=b'N'),
+            stream=dict(on=b'b', off=b's'),
+            # impedance=AttrDict(on=b'z',off=b'Z'),
+        )
 
         # other characteristics
         # disconnect="2d30c084f39f4ce6923f3484ea480596",
@@ -71,11 +74,11 @@ ID_TURNOVER = streams_dict([201, 10])
 """The number of samples processed before the packet ID cycles back to zero."""
 
 
-class PacketHandler(BasePacketHandler):
+class PacketHandler(device.BasePacketHandler):
     """Process packets from the OpenBCI Ganglion into chunks."""
 
     def __init__(self, streamer, **kwargs):
-        super().__init__(PARAMS["streams"], streamer, **kwargs)
+        super().__init__(PARAMS.streams, streamer, **kwargs)
 
         self._sample_ids = streams_dict([-1] * len(STREAMS))
 
@@ -88,7 +91,7 @@ class PacketHandler(BasePacketHandler):
 
         if "accelerometer" in self._streamer.subscriptions:
             # queue accelerometer_on command
-            self._streamer.send_command(PARAMS["ble"]["accelerometer_on"])
+            self._streamer.send_command(PARAMS.ble.command.accelerometer.on)
 
         # byte ID ranges for parsing function selection
         self._byte_id_ranges = {(101, 200): self._parse_compressed_19bit,
@@ -132,7 +135,7 @@ class PacketHandler(BasePacketHandler):
 
     def _parse_message(self, start_byte, packet):
         """Parse a partial ASCII message."""
-        if "messages" in self._streamer.subscriptions:
+        if "messages" in self._streamer.subscriptions: import BasePacketHandle
             self._chunks["messages"] += str(packet)
             if start_byte == 207:
                 self._enqueue_chunk("messages")

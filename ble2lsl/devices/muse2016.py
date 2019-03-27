@@ -17,8 +17,9 @@ TODO:
    http://developer.choosemuse.com/tools/windows-tools/available-data-muse-direct
 """
 
-from ble2lsl.devices.device import BasePacketHandler
-from ble2lsl.utils import dict_partial_from_keys
+from ble2lsl.devices import device
+from ble2lsl import utils
+from ble2lsl.utils import AttrDict
 
 import bitstring
 import numpy as np
@@ -34,10 +35,10 @@ DEFAULT_SUBSCRIPTIONS = STREAMS
 """Sources to which to subscribe by default."""
 
 # for constructing dicts with STREAMS as keys
-streams_dict = dict_partial_from_keys(STREAMS)
+streams_dict = utils.dict_partial_from_keys(STREAMS)
 
-PARAMS = dict(
-    streams=dict(
+PARAMS = AttrDict(
+    streams=AttrDict(
         type=streams_dict(STREAMS),  # identity mapping. best solution?
         channel_count=streams_dict([5, 3, 3, 4, 1]),
         nominal_srate=streams_dict([256, 52, 52, 0.1, 0.0]),
@@ -59,31 +60,36 @@ PARAMS = dict(
         chunk_size=streams_dict([12, 3, 3, 1, 1]),
     ),
 
-    ble=dict(
+    ble=AttrDict(
         address_type=BLEAddressType.public,
         interval_min=60,  # pygatt default, seems fine
         interval_max=76,  # pygatt default
 
         # receive characteristic UUIDs
-        EEG=['273e0003-4c4d-454d-96be-f03bac821358',
-             '273e0004-4c4d-454d-96be-f03bac821358',
-             '273e0005-4c4d-454d-96be-f03bac821358',
-             '273e0006-4c4d-454d-96be-f03bac821358',
-             '273e0007-4c4d-454d-96be-f03bac821358'],
-        # reference=['273e0008-4c4d-454d-96be-f03bac821358'],
-        accelerometer='273e000a-4c4d-454d-96be-f03bac821358',
-        gyroscope='273e0009-4c4d-454d-96be-f03bac821358',
-        telemetry='273e000b-4c4d-454d-96be-f03bac821358',
-        status='273e0001-4c4d-454d-96be-f03bac821358',  # same as send
+        receive=dict(
+            EEG=['273e0003-4c4d-454d-96be-f03bac821358',
+                 '273e0004-4c4d-454d-96be-f03bac821358',
+                 '273e0005-4c4d-454d-96be-f03bac821358',
+                 '273e0006-4c4d-454d-96be-f03bac821358',
+                 '273e0007-4c4d-454d-96be-f03bac821358'],
+            # reference=['273e0008-4c4d-454d-96be-f03bac821358'],
+            accelerometer='273e000a-4c4d-454d-96be-f03bac821358',
+            gyroscope='273e0009-4c4d-454d-96be-f03bac821358',
+            telemetry='273e000b-4c4d-454d-96be-f03bac821358',
+            status='273e0001-4c4d-454d-96be-f03bac821358',  # same as send
+        ),
 
-        # send characteristic UUID and commands
+        # send characteristic UUID
         send='273e0001-4c4d-454d-96be-f03bac821358',
-        stream_on=(0x02, 0x64, 0x0a),  # b'd'
-        stream_off=(0x02, 0x68, 0x0a),  # ?
-        # keep_alive=(0x02, 0x6b, 0x0a), # (?) b'k'
-        # request_info=(0x03, 0x76, 0x31, 0x0a),
-        # request_status=(0x02, 0x73, 0x0a),
-        # reset=(0x03, 0x2a, 0x31, 0x0a)
+
+        command=dict(
+            stream=dict(on=(0x02, 0x64, 0x0a), off=(0x02, 0x68, 0x0a)),
+            # keep_alive=(0x02, 0x6b, 0x0a), # (?) b'k'
+            # request_info=(0x03, 0x76, 0x31, 0x0a),
+            # request_status=(0x02, 0x73, 0x0a),
+            # reset=(0x03, 0x2a, 0x31, 0x0a)
+        )
+
     )
 )
 """Muse 2016 LSL- and BLE-related parameters."""
@@ -114,11 +120,11 @@ EEG_HANDLE_RECEIVE_ORDER = [44, 41, 38, 32, 35]
 """Channel indices and receipt order of EEG packets."""
 
 
-class PacketHandler(BasePacketHandler):
+class PacketHandler(device.BasePacketHandler):
     """Process packets from the Muse 2016 headset into chunks."""
 
     def __init__(self, streamer, **kwargs):
-        super().__init__(PARAMS["streams"], streamer, **kwargs)
+        super().__init__(PARAMS.streams, streamer, **kwargs)
 
         if "status" in self._streamer.subscriptions:
             self._chunks["status"][0] = ""
@@ -136,7 +142,7 @@ class PacketHandler(BasePacketHandler):
             self._process_status(unpacked)
         else:
             data = np.array(unpacked[1:],
-                            dtype=PARAMS["streams"]["numpy_dtype"][name])
+                            dtype=PARAMS.streams.numpy_dtype[name])
 
             if name == "EEG":
                 idx = EEG_HANDLE_CH_IDXS[handle]
