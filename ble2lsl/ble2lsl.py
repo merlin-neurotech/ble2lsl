@@ -20,6 +20,8 @@ TODO:
    https://github.com/peplin/pygatt
 """
 
+from ble2lsl import utils
+
 from queue import Queue
 from struct import error as StructError
 import threading
@@ -473,7 +475,7 @@ class Dummy(BaseStreamer):
 
 class Replay(Dummy):
     def __init__(self, device, loop=False, autostart=False, **kwargs):
-        chunk_iterator = stream_collect(path).read_stream()["CSV"]
+        chunk_iterator = utils.stream_collect(path).read_stream()["CSV"]
         super().__init__(self, device, mock_address="REPLAY",
                          chunk_iterator=chunk_iterator, autostart=autostart,
                          **kwargs)
