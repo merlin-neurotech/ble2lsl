@@ -387,7 +387,7 @@ class Dummy(BaseStreamer):
     """
 
     def __init__(self, device, chunk_iterator=None, subscriptions=None,
-                 autostart=True, **kwargs):
+                 autostart=True, mock_address="DUMMY", **kwargs):
         """Construct a `Dummy` instance.
 
         Args:
@@ -404,8 +404,8 @@ class Dummy(BaseStreamer):
         BaseStreamer.__init__(self, device=device, subscriptions=subscriptions,
                               **kwargs)
 
-        self._device_id = "{}-DUMMY".format(device.NAME)
-        self._address = "DUMMY"
+        self._device_id = "{}-{}".format(device.NAME, mock_address)
+        self._address = mock_address
         self._init_lsl_outlets()
 
         chunk_shapes = {name: self._chunks[name].shape
@@ -471,6 +471,28 @@ class Dummy(BaseStreamer):
         self._timestamps = np.array([timestamp]*self._chunk_size)
 
 
+class Replay(Dummy):
+    def __init__(self, device, loop=False, autostart=False, **kwargs):
+        chunk_iterator = stream_collect(path).read_stream()["CSV"]
+        super().__init__(self, device, mock_address="REPLAY",
+                         chunk_iterator=chunk_iterator, autostart=autostart,
+                         **kwargs)
+
+    def _stream(self, name):
+        """Run in thread to mimic periodic hardware input."""
+        for chunk in self._chunk_iter[name]:
+            if not self._proceed:
+                # dummy has received stop signal
+                break
+
+            self._chunks[name] = np.array([np.delete(i, 0) for i in chunk])
+            timestamp = chunk[0][0]
+            self._push_func[name](name, timestamp)
+
+            delay = self._delays[name]
+            time.sleep(delay % 1)
+
+
 def stream_idxs_zeros(subscriptions):
     """Initialize an integer index for each subscription."""
     idxs = {name: 0 for name in subscriptions}
@@ -534,5 +556,19 @@ class NoisySinusoids(ChunkIterator):
             chunk += self._freq_amps[i] * np.sin(freq * self._t)
 
         self._t += self._chunk_t_incr
+
+        return chunk
+
+class FileIterator(ChunkIterator):
+    def __init__(self, path):
+        self._path = self._path_check(path)
+        self._files = self._scan_files(self._path)
+        self._name_pattern = re.compile(self._choose_files(self._files))
+
+    def __iter__(self):
+
+        return self
+
+    def __next__(self):
 
         return chunk
