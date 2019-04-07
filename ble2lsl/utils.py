@@ -1,6 +1,11 @@
 """Utilities for use within ble2lsl."""
 
+import json
+from pathlib import Path
+import re
 from warnings import warn
+
+import numpy as np
 
 
 def subdicts_to_attrdicts(dict_):
@@ -8,7 +13,7 @@ def subdicts_to_attrdicts(dict_):
         try:
             dict_[key].keys()
             dict_[key] = AttrDict(dict_[key])
-            dicts_to_attrdicts(dict_[key])
+            subdicts_to_attrdicts(dict_[key])
         except AttributeError:
             pass
 

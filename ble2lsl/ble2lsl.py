@@ -22,6 +22,7 @@ TODO:
 
 from ble2lsl import utils
 
+import json
 from queue import Queue
 from struct import error as StructError
 import threading
@@ -418,9 +419,7 @@ class Dummy(BaseStreamer):
         # generate or load fake data
         if chunk_iterator is None:
             chunk_iterator = NoisySinusoids
-        self._chunk_iter = {name: chunk_iterator(chunk_shapes[name],
-                                                 nominal_srate[name])
-                            for name in self._subscriptions}
+        self._chunk_iter = chunk_iterator
 
         # threads to mimic incoming BLE data
         self._threads = {name: threading.Thread(target=self._stream,
@@ -474,25 +473,32 @@ class Dummy(BaseStreamer):
 
 
 class Replay(Dummy):
-    def __init__(self, device, loop=False, autostart=False, **kwargs):
+    def __init__(self, device, path, loop=False, autostart=True, **kwargs):
         chunk_iterator = utils.stream_collect(path).read_stream()["CSV"]
-        super().__init__(self, device, mock_address="REPLAY",
+        # with open("tmp.log", "w") as f:
+        #     f.write(json.dumps(chunk_iterator))
+        super().__init__(device, mock_address="REPLAY",
                          chunk_iterator=chunk_iterator, autostart=autostart,
                          **kwargs)
 
     def _stream(self, name):
         """Run in thread to mimic periodic hardware input."""
-        for chunk in self._chunk_iter[name]:
-            if not self._proceed:
-                # dummy has received stop signal
-                break
+        chunk_size = self._stream_params.chunk_size
+        while True:
+            raw_data = self._chunk_iter[name]._raw_data()
+            for i in range(0, len(raw_data), chunk_size[name]):
+                #chunk = self._chunk_iter[name].data[i:i+chunk_size[name]]
+                chunk = raw_data[i:i+chunk_size[name], :]
+                if not self._proceed:
+                    # dummy has received stop signal
+                    break
 
-            self._chunks[name] = np.array([np.delete(i, 0) for i in chunk])
-            timestamp = chunk[0][0]
-            self._push_func[name](name, timestamp)
+                self._chunks[name] = chunk[:, 1:]
+                timestamp = chunk[0, 0]
+                self._push_func[name](name, timestamp)
 
-            delay = self._delays[name]
-            time.sleep(delay % 1)
+                delay = self._delays[name]
+                time.sleep(delay)
 
 
 def stream_idxs_zeros(subscriptions):

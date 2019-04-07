@@ -135,7 +135,7 @@ class PacketHandler(device.BasePacketHandler):
 
     def _parse_message(self, start_byte, packet):
         """Parse a partial ASCII message."""
-        if "messages" in self._streamer.subscriptions: import BasePacketHandle
+        if "messages" in self._streamer.subscriptions:
             self._chunks["messages"] += str(packet)
             if start_byte == 207:
                 self._enqueue_chunk("messages")
