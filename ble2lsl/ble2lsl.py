@@ -20,6 +20,9 @@ TODO:
    https://github.com/peplin/pygatt
 """
 
+from ble2lsl import utils
+
+import json
 from queue import Queue
 from struct import error as StructError
 import threading
@@ -66,7 +69,7 @@ class BaseStreamer:
         self._subscriptions = tuple(subscriptions)
         self._time_func = time_func
         self._user_ch_names = ch_names if ch_names is not None else {}
-        self._stream_params = self._device.PARAMS['streams']
+        self._stream_params = self._device.PARAMS.streams
 
         self._chunk_idxs = stream_idxs_zeros(self._subscriptions)
         self._chunks = empty_chunks(self._stream_params,
@@ -75,7 +78,7 @@ class BaseStreamer:
         # StreamOutlet.push_chunk doesn't like single-sample chunks...
         # but want to keep using push_chunk for intra-chunk timestamps
         # doing this beforehand to avoid a chunk size check for each push
-        chunk_size = self._stream_params["chunk_size"]
+        chunk_size = self._stream_params.chunk_size
         self._push_func = {name: (self._push_chunk_as_sample
                                   if chunk_size[name] == 1
                                   else self._push_chunk)
@@ -99,7 +102,7 @@ class BaseStreamer:
             self._info[name] = lsl.StreamInfo(outlet_name, **info,
                                               source_id=self._device_id)
             self._add_device_info(name)
-            chunk_size = self._stream_params["chunk_size"][name]
+            chunk_size = self._stream_params.chunk_size[name]
             self._outlets[name] = lsl.StreamOutlet(self._info[name],
                                                    chunk_size=chunk_size,
                                                    max_buffered=360)
@@ -124,7 +127,7 @@ class BaseStreamer:
 
         channels = desc.append_child("channels")
         try:
-            ch_names = self._stream_params["ch_names"][name]
+            ch_names = self._stream_params.ch_names[name]
             # use user-specified ch_names if available and right no. channels
             if name in self._user_ch_names:
                 user_ch_names = self._user_ch_names[name]
@@ -139,8 +142,8 @@ class BaseStreamer:
                           .format(name), "using default ch_names.")
 
             for c, ch_name in enumerate(ch_names):
-                unit = self._stream_params["units"][name][c]
-                type_ = self._stream_params["type"][name]
+                unit = self._stream_params.units[name][c]
+                type_ = self._stream_params.type[name]
                 channels.append_child("channel") \
                     .append_child_value("label", ch_name) \
                     .append_child_value("unit", unit) \
@@ -190,12 +193,12 @@ class Streamer(BaseStreamer):
         """
         BaseStreamer.__init__(self, device=device, **kwargs)
         self._transmit_queue = Queue()
-        self._ble_params = self._device.PARAMS["ble"]
+        self._ble_params = self._device.PARAMS.ble
         self._address = address
 
         # use internal timestamps if requested, or if stream is variable rate
         # (LSL uses nominal_srate=0.0 for variable rates)
-        nominal_srates = self._stream_params["nominal_srate"]
+        nominal_srates = self._stream_params.nominal_srate
         self._internal_timestamps = {name: (internal_timestamps
                                             if nominal_srates[name] else True)
                                      for name in device.STREAMS}
@@ -336,8 +339,8 @@ class Streamer(BaseStreamer):
     def _transmit_chunks(self):
         """TODO: missing chunk vs. missing sample"""
         # nominal duration of chunks for progressing non-internal timestamps
-        chunk_period = {name: (self._stream_params["chunk_size"][name]
-                               / self._stream_params["nominal_srate"][name])
+        chunk_period = {name: (self._stream_params.chunk_size[name]
+                               / self._stream_params.nominal_srate[name])
                         for name in self._subscriptions
                         if not self._internal_timestamps[name]}
         first_idx = self._first_chunk_idxs
@@ -387,7 +390,7 @@ class Dummy(BaseStreamer):
     """
 
     def __init__(self, device, chunk_iterator=None, subscriptions=None,
-                 autostart=True, **kwargs):
+                 autostart=True, mock_address="DUMMY", **kwargs):
         """Construct a `Dummy` instance.
 
         Args:
@@ -395,7 +398,7 @@ class Dummy(BaseStreamer):
             chunk_iterator (generator): Class that iterates through chunks.
             autostart (bool): Whether to start streaming on instantiation.
         """
-        nominal_srate = device.PARAMS["streams"]["nominal_srate"]
+        nominal_srate = device.PARAMS.streams.nominal_srate
         if subscriptions is None:
             subscriptions = get_default_subscriptions(device)
         subscriptions = {name for name in subscriptions
@@ -404,8 +407,8 @@ class Dummy(BaseStreamer):
         BaseStreamer.__init__(self, device=device, subscriptions=subscriptions,
                               **kwargs)
 
-        self._device_id = "{}-DUMMY".format(device.NAME)
-        self._address = "DUMMY"
+        self._device_id = "{}-{}".format(device.NAME, mock_address)
+        self._address = mock_address
         self._init_lsl_outlets()
 
         chunk_shapes = {name: self._chunks[name].shape
@@ -416,9 +419,7 @@ class Dummy(BaseStreamer):
         # generate or load fake data
         if chunk_iterator is None:
             chunk_iterator = NoisySinusoids
-        self._chunk_iter = {name: chunk_iterator(chunk_shapes[name],
-                                                 nominal_srate[name])
-                            for name in self._subscriptions}
+        self._chunk_iter = chunk_iterator
 
         # threads to mimic incoming BLE data
         self._threads = {name: threading.Thread(target=self._stream,
@@ -471,6 +472,35 @@ class Dummy(BaseStreamer):
         self._timestamps = np.array([timestamp]*self._chunk_size)
 
 
+class Replay(Dummy):
+    def __init__(self, device, path, loop=False, autostart=True, **kwargs):
+        chunk_iterator = utils.stream_collect(path).read_stream()["CSV"]
+        # with open("tmp.log", "w") as f:
+        #     f.write(json.dumps(chunk_iterator))
+        super().__init__(device, mock_address="REPLAY",
+                         chunk_iterator=chunk_iterator, autostart=autostart,
+                         **kwargs)
+
+    def _stream(self, name):
+        """Run in thread to mimic periodic hardware input."""
+        chunk_size = self._stream_params.chunk_size
+        while True:
+            raw_data = self._chunk_iter[name]._raw_data()
+            for i in range(0, len(raw_data), chunk_size[name]):
+                #chunk = self._chunk_iter[name].data[i:i+chunk_size[name]]
+                chunk = raw_data[i:i+chunk_size[name], :]
+                if not self._proceed:
+                    # dummy has received stop signal
+                    break
+
+                self._chunks[name] = chunk[:, 1:]
+                timestamp = chunk[0, 0]
+                self._push_func[name](name, timestamp)
+
+                delay = self._delays[name]
+                time.sleep(delay)
+
+
 def stream_idxs_zeros(subscriptions):
     """Initialize an integer index for each subscription."""
     idxs = {name: 0 for name in subscriptions}
@@ -479,9 +509,9 @@ def stream_idxs_zeros(subscriptions):
 
 def empty_chunks(stream_params, subscriptions):
     """Initialize an empty chunk array for each subscription."""
-    chunks = {name: np.zeros((stream_params["chunk_size"][name],
-                              stream_params["channel_count"][name]),
-                             dtype=stream_params["numpy_dtype"][name])
+    chunks = {name: np.zeros((stream_params.chunk_size[name],
+                              stream_params.channel_count[name]),
+                             dtype=stream_params.numpy_dtype[name])
               for name in subscriptions}
     return chunks
 
@@ -494,7 +524,7 @@ def get_default_subscriptions(device, pos_rate=False):
         subscriptions = device.STREAMS
     if pos_rate:
         subscriptions = [name for name in subscriptions
-                         if device.PARAMS['streams']['nominal_srate'][name] > 0]
+                         if device.PARAMS.streams.nominal_srate[name] > 0]
     return subscriptions
 
 
@@ -534,5 +564,19 @@ class NoisySinusoids(ChunkIterator):
             chunk += self._freq_amps[i] * np.sin(freq * self._t)
 
         self._t += self._chunk_t_incr
+
+        return chunk
+
+class FileIterator(ChunkIterator):
+    def __init__(self, path):
+        self._path = self._path_check(path)
+        self._files = self._scan_files(self._path)
+        self._name_pattern = re.compile(self._choose_files(self._files))
+
+    def __iter__(self):
+
+        return self
+
+    def __next__(self):
 
         return chunk
