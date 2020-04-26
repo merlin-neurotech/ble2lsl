@@ -155,7 +155,7 @@ class PacketHandler(BasePacketHandler):
                 self._chunks[name][:, idx] = CONVERT_FUNCS[name](data)
                 if not handle == EEG_HANDLE_RECEIVE_ORDER[-1]:
                     return
-            else if name == "PPG":
+            elif name == "PPG":
                 idx = PPG_HANDLE_CH_IDXS[handle]
                 self._chunks[name][:, idx] = CONVERT_FUNCS[name](data)
                 if not handle == PPG_HANDLE_RECEIVE_ORDER[-1]:
